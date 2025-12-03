@@ -20,6 +20,7 @@ pipeline {
     stage('安装依赖') {
       steps {
         echo '📦 安装项目依赖...'
+        sh 'echo "当前执行安装依赖的用户：$(whoami)，用户组：$(id -gn)"'
         nodejs(nodeJSInstallationName: env.NODEJS_NAME) {
           sh 'npm install --production'
         }
@@ -37,9 +38,11 @@ pipeline {
       steps {
         echo '🚀 部署新代码到服务器...'
         sh """
+          echo "当前执行部署的用户：$(whoami)，用户组：$(id -gn)"
+          echo "部署目录 ${DEPLOY_DIR} 的权限和归属："
+          ls -ld ${DEPLOY_DIR} || echo "目录不存在"
           mkdir -p ${DEPLOY_DIR}
           cp -r ./* ${DEPLOY_DIR}/
-          chown -R jenkins:jenkins ${DEPLOY_DIR}
         """
       }
     }
@@ -48,11 +51,18 @@ pipeline {
       steps {
         echo '🔄 启动新的 Node.js 服务...'
         sh """
+          echo "====================================="
+          echo "当前执行启动服务的用户：$(whoami)"
+          echo "当前用户ID：$(id -u)，用户组ID：$(id -g)"
+          echo "Node.js 安装路径：${nodejsPath}，所属用户：$(ls -ld ${nodejsPath} | awk '{print \$3}')"
+          echo "部署目录 ${DEPLOY_DIR} 归属用户：$(ls -ld ${DEPLOY_DIR} | awk '{print \$3}')"
+          echo "====================================="
           cd ${DEPLOY_DIR}
           nohup npm run start > app.log 2>&1 & disown
           sleep 3
           if ps -ef | grep -v grep | grep "node.*${DEPLOY_DIR}"; then
-            echo "✅ 服务进程已启动"
+            echo "✅ 服务进程已启动，进程详情："
+            ps -ef | grep -v grep | grep "node.*${DEPLOY_DIR}"
           else
             echo "❌ 服务进程未启动，日志内容："
             cat ${DEPLOY_DIR}/app.log
@@ -61,7 +71,7 @@ pipeline {
         """
       }
     }
-  } 
+  }
 
   post {
     success {
