@@ -53,9 +53,6 @@ pipeline {
         sh """
           echo "====================================="
           echo "当前执行启动服务的用户：$(whoami)"
-          echo "当前用户ID：$(id -u)，用户组ID：$(id -g)"
-          echo "部署目录 ${DEPLOY_DIR} 归属用户：$(ls -ld ${DEPLOY_DIR} | awk '{print \$3}')"
-          echo "====================================="
           cd ${DEPLOY_DIR}
           nohup npm run start > app.log 2>&1 & disown
           sleep 3
