@@ -31,25 +31,24 @@ pipeline {
       steps {
         echo '🛑 停止旧的 Node.js 服务并释放端口...'
         sh """
-          # 修复点1：杀死占用端口 ${PORT} 的进程（增加空值校验）
-          PID=\$(lsof -ti:${PORT} || echo "none")
-          if [ "\$PID" != "none" ] && [ -n "\$PID" ]; then  # 新增：校验非空+非none
-            echo "杀死占用 ${PORT} 端口的进程：\$PID"
+          # 修复：\${PORT} 转义，避免 Groovy 解析
+          PID=\$(lsof -ti:\${PORT} || echo "none")
+          if [ "\$PID" != "none" ] && [ -n "\$PID" ]; then
+            echo "杀死占用 \${PORT} 端口的进程：\$PID"
             kill -9 \$PID
             sleep 2
           else
-            echo "${PORT} 端口未被占用"
+            echo "\${PORT} 端口未被占用"
           fi
 
-          # 修复点2：杀死旧的 node app.js 进程（核心修复：严格校验PID有效性）
-          OLD_PID=\$(ps -ef | grep -v grep | grep "node ${APP_ENTRY}" | awk '{print \$2}' | tr -d ' ' || echo "none")
-          # 校验：OLD_PID 不是 none 且是数字（避免空值/无效字符）
+          # 核心修复：\${APP_ENTRY} 转义
+          OLD_PID=\$(ps -ef | grep -v grep | grep "node \${APP_ENTRY}" | awk '{print \$2}' | tr -d ' ' || echo "none")
           if [ "\$OLD_PID" != "none" ] && [ -n "\$OLD_PID" ] && [[ "\$OLD_PID" =~ ^[0-9]+$ ]]; then
             echo "杀死旧服务进程：\$OLD_PID"
             kill -9 \$OLD_PID
             sleep 2
           else
-            echo "无旧的 node ${APP_ENTRY} 服务进程需要停止"
+            echo "无旧的 node \${APP_ENTRY} 服务进程需要停止"
           fi
         """
       }
@@ -59,16 +58,16 @@ pipeline {
       steps {
         echo '🚀 部署新代码到服务器...'
         sh """
-          mkdir -p ${DEPLOY_DIR}
+          mkdir -p \${DEPLOY_DIR}
           # 备份旧日志
-          cp ${DEPLOY_DIR}/app.log ${DEPLOY_DIR}/app.log.bak 2>/dev/null || true
+          cp \${DEPLOY_DIR}/app.log \${DEPLOY_DIR}/app.log.bak 2>/dev/null || true
           # 清空新日志
-          > ${DEPLOY_DIR}/app.log
+          > \${DEPLOY_DIR}/app.log
           # 复制代码
-          cp -r ./* ${DEPLOY_DIR}/
+          cp -r ./* \${DEPLOY_DIR}/
           # 设置权限
-          chmod -R 755 ${DEPLOY_DIR}
-          chown -R root:root ${DEPLOY_DIR}
+          chmod -R 755 \${DEPLOY_DIR}
+          chown -R root:root \${DEPLOY_DIR}
         """
       }
     }
@@ -79,54 +78,54 @@ pipeline {
         nodejs(nodeJSInstallationName: env.NODEJS_NAME) {
           sh """
             echo "📋 当前执行用户信息："
-            whoami  # 显示当前用户名（如 jenkins、root）
+            whoami
             echo "当前用户 ID 和所属组："
-            id     # 显示 uid、gid、所属组列表（详细信息）
+            id
             echo "当前工作目录："
-            pwd    # 辅助确认执行路径
+            pwd
             echo "=============================================="
-            cd ${DEPLOY_DIR}
-            # 强制杀死残留进程（增加空值容错）
-            PIDS=\$(ps -ef | grep -v grep | grep "node ${APP_ENTRY}" | awk '{print \$2}')
+            cd \${DEPLOY_DIR}
+            # 修复：\${APP_ENTRY} 转义
+            PIDS=\$(ps -ef | grep -v grep | grep "node \${APP_ENTRY}" | awk '{print \$2}')
             if [ -n "\$PIDS" ]; then
               echo "强制杀死残留进程：\$PIDS"
               kill -9 \$PIDS 2>/dev/null || echo "部分进程已退出"
             fi
             sleep 1
             # 启动服务
-            nohup node ${APP_ENTRY} > app.log 2>&1 &
+            nohup node \${APP_ENTRY} > app.log 2>&1 &
             START_PID=\$!
-            echo "服务启动命令 PID：\$START_PID" >> ${DEPLOY_DIR}/app.log
+            echo "服务启动命令 PID：\$START_PID" >> \${DEPLOY_DIR}/app.log
             sleep 5
 
-            # 检测进程是否存活
-            CURRENT_PID=\$(ps -ef | grep -v grep | grep "node ${APP_ENTRY}" | awk '{print \$2}' | head -1 || echo "none")
+            # 检测进程是否存活（转义 \${APP_ENTRY}）
+            CURRENT_PID=\$(ps -ef | grep -v grep | grep "node \${APP_ENTRY}" | awk '{print \$2}' | head -1 || echo "none")
             if [ "\$CURRENT_PID" = "none" ]; then
               echo "❌ 服务进程未启动！启动日志："
-              cat ${DEPLOY_DIR}/app.log
+              cat \${DEPLOY_DIR}/app.log
               exit 1
             fi
             echo "✅ 服务进程已启动，PID：\$CURRENT_PID"
-            ps -ef | grep -v grep | grep "node ${APP_ENTRY}"
+            ps -ef | grep -v grep | grep "node \${APP_ENTRY}"
 
-            # 检测端口是否监听
-            PORT_LISTEN=\$(ss -tulpn | grep ":${PORT}" | grep "node" || echo "none")
+            # 检测端口是否监听（转义 \${PORT}）
+            PORT_LISTEN=\$(ss -tulpn | grep ":\${PORT}" | grep "node" || echo "none")
             if [ "\$PORT_LISTEN" = "none" ]; then
-              echo "❌ 服务未监听 ${PORT} 端口！启动日志："
-              cat ${DEPLOY_DIR}/app.log
+              echo "❌ 服务未监听 \${PORT} 端口！启动日志："
+              cat \${DEPLOY_DIR}/app.log
               exit 1
             fi
-            echo "✅ ${PORT} 端口已被 node 进程监听："
-            ss -tulpn | grep ":${PORT}"
+            echo "✅ \${PORT} 端口已被 node 进程监听："
+            ss -tulpn | grep ":\${PORT}"
 
-            # 检测服务是否可访问
-            HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:${PORT})
+            # 检测服务是否可访问（转义 \${PORT}）
+            HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:\${PORT})
             if [ "\$HTTP_CODE" = "200" ] || [ "\$HTTP_CODE" = "301" ] || [ "\$HTTP_CODE" = "302" ]; then
               echo "✅ 服务可正常访问，HTTP 状态码：\$HTTP_CODE"
             else
               echo "⚠️ 服务进程启动但访问失败，状态码：\$HTTP_CODE"
               echo "启动日志："
-              cat ${DEPLOY_DIR}/app.log
+              cat \${DEPLOY_DIR}/app.log
               # exit 1  // 可选：非关键服务可注释
             fi
           """
@@ -138,11 +137,12 @@ pipeline {
   post {
     success {
       echo "✅ 部署成功！访问地址: http://服务器IP:${PORT}"
-      sh "ps -ef | grep -v grep | grep 'node ${APP_ENTRY}'"
+      # 此处 Groovy 解析变量，无需转义（因为不在 Shell 块内）
+      sh "ps -ef | grep -v grep | grep 'node \${APP_ENTRY}'"
     }
     failure {
       echo '❌ 部署失败，请检查日志！'
-      sh "cat ${DEPLOY_DIR}/app.log || echo '日志文件不存在'"
+      sh "cat \${DEPLOY_DIR}/app.log || echo '日志文件不存在'"
     }
   }
 }
