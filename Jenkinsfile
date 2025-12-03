@@ -20,7 +20,7 @@ pipeline {
     stage('安装依赖') {
       steps {
         echo '📦 安装项目依赖...'
-        sh 'echo "当前执行安装依赖的用户：$(whoami)，用户组：$(id -gn)"'
+        sh 'echo "当前执行安装依赖的用户：$(whoami)"'
         nodejs(nodeJSInstallationName: env.NODEJS_NAME) {
           sh 'npm install --production'
         }
@@ -38,7 +38,7 @@ pipeline {
       steps {
         echo '🚀 部署新代码到服务器...'
         sh """
-          echo "当前执行部署的用户：$(whoami)，用户组：$(id -gn)"
+          echo "当前执行部署的用户：$(whoami)"
           echo "部署目录 ${DEPLOY_DIR} 的权限和归属："
           ls -ld ${DEPLOY_DIR} || echo "目录不存在"
           mkdir -p ${DEPLOY_DIR}
