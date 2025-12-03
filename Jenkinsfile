@@ -54,7 +54,6 @@ pipeline {
           echo "====================================="
           echo "当前执行启动服务的用户：$(whoami)"
           echo "当前用户ID：$(id -u)，用户组ID：$(id -g)"
-          echo "Node.js 安装路径：${nodejsPath}，所属用户：$(ls -ld ${nodejsPath} | awk '{print \$3}')"
           echo "部署目录 ${DEPLOY_DIR} 归属用户：$(ls -ld ${DEPLOY_DIR} | awk '{print \$3}')"
           echo "====================================="
           cd ${DEPLOY_DIR}
