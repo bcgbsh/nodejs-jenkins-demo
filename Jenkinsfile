@@ -1,5 +1,5 @@
 pipeline {
-  agent any  // 顶级必须有 agent 配置
+  agent any  
 
   environment {
     DEPLOY_DIR = '/u01/nodejs-jenkins-demo'
@@ -8,10 +8,9 @@ pipeline {
     APP_ENTRY = 'app.js'
   }
 
-  // 所有 stage 必须包裹在 stages 块内（核心修复点）
   stages {
     stage('拉取代码') {
-      steps {  // stage 内必须有 steps 块
+      steps {  
         echo '📥 开始拉取代码...'
         git url: 'https://github.com/bcgbsh/nodejs-jenkins-demo.git',
             branch: 'main',
@@ -32,9 +31,9 @@ pipeline {
       steps {
         echo '🛑 停止旧的 Node.js 服务并释放端口...'
         sh """
-          # 杀死占用端口 ${PORT} 的进程
+          # 修复点1：杀死占用端口 ${PORT} 的进程（增加空值校验）
           PID=\$(lsof -ti:${PORT} || echo "none")
-          if [ "\$PID" != "none" ]; then
+          if [ "\$PID" != "none" ] && [ -n "\$PID" ]; then  # 新增：校验非空+非none
             echo "杀死占用 ${PORT} 端口的进程：\$PID"
             kill -9 \$PID
             sleep 2
@@ -42,12 +41,15 @@ pipeline {
             echo "${PORT} 端口未被占用"
           fi
 
-          # 杀死旧的 node app.js 进程
-          OLD_PID=\$(ps -ef | grep -v grep | grep "node ${APP_ENTRY}" | awk '{print \$2}' || echo "none")
-          if [ "\$OLD_PID" != "none" ]; then
+          # 修复点2：杀死旧的 node app.js 进程（核心修复：严格校验PID有效性）
+          OLD_PID=\$(ps -ef | grep -v grep | grep "node ${APP_ENTRY}" | awk '{print \$2}' | tr -d ' ' || echo "none")
+          # 校验：OLD_PID 不是 none 且是数字（避免空值/无效字符）
+          if [ "\$OLD_PID" != "none" ] && [ -n "\$OLD_PID" ] && [[ "\$OLD_PID" =~ ^[0-9]+$ ]]; then
             echo "杀死旧服务进程：\$OLD_PID"
             kill -9 \$OLD_PID
             sleep 2
+          else
+            echo "无旧的 node ${APP_ENTRY} 服务进程需要停止"
           fi
         """
       }
@@ -72,7 +74,7 @@ pipeline {
     }
 
     stage('启动新服务') {
-      steps {  // 此步骤是修复核心：stage 内必须有 steps 包裹
+      steps {  
         echo '🔄 启动新的 Node.js 服务...'
         nodejs(nodeJSInstallationName: env.NODEJS_NAME) {
           sh """
@@ -84,8 +86,12 @@ pipeline {
             pwd    # 辅助确认执行路径
             echo "=============================================="
             cd ${DEPLOY_DIR}
-            # 强制杀死残留进程
-            pkill -f "node ${APP_ENTRY}" 2>/dev/null || true
+            # 强制杀死残留进程（增加空值容错）
+            PIDS=\$(ps -ef | grep -v grep | grep "node ${APP_ENTRY}" | awk '{print \$2}')
+            if [ -n "\$PIDS" ]; then
+              echo "强制杀死残留进程：\$PIDS"
+              kill -9 \$PIDS 2>/dev/null || echo "部分进程已退出"
+            fi
             sleep 1
             # 启动服务
             nohup node ${APP_ENTRY} > app.log 2>&1 &
@@ -129,7 +135,6 @@ pipeline {
     }
   }
 
-  // post 块在 stages 外、pipeline 内（层级正确）
   post {
     success {
       echo "✅ 部署成功！访问地址: http://服务器IP:${PORT}"
