@@ -52,9 +52,9 @@ pipeline {
           cd ${DEPLOY_DIR}
           nohup npm run start > app.log 2>&1 & disown
           sleep 3
-          if ps -ef | grep -v grep | grep "node.*${DEPLOY_DIR}"; then
+          if ps -ef | grep -v grep | grep "node app.js"; then
             echo "✅ 服务进程已启动，进程详情："
-            ps -ef | grep -v grep | grep "node.*${DEPLOY_DIR}"
+            ps -ef | grep -v grep | grep "node app.js"
           else
             echo "❌ 服务进程未启动，日志内容："
             cat ${DEPLOY_DIR}/app.log
