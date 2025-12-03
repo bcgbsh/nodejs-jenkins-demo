@@ -7,7 +7,7 @@ pipeline {
     // 项目部署目录（根据服务器实际路径修改）
     DEPLOY_DIR = '/u01/nodejs-jenkins-demo'
     // Node.js 环境名称（Jenkins 全局工具配置中设置的名称）
-    NODEJS_NAME = 'Node.js 16.x'
+    NODEJS_NAME = 'Node.js 18.x'
     // 服务端口
     PORT = 3300
   }
@@ -19,9 +19,9 @@ pipeline {
       steps {
         echo '📥 开始拉取代码...'
         // 替换为你的代码仓库地址（GitLab/GitHub/Gitee）
-        git url: 'https://gitee.com/your-username/nodejs-jenkins-demo.git',
+        git url: 'https://github.com/bcgbsh/nodejs-jenkins-demo.git',
             branch: 'main',
-            credentialsId: 'git-credentials-id' // Jenkins 配置的 Git 凭证 ID
+            credentialsId: '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' // Jenkins 配置的 Git 凭证 ID
       }
     }
 
