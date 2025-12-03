@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Node.js + Jenkins 自动化部署示例</title>
+  <style>
+    body {
+      text-align: center;
+      margin-top: 100px;
+      font-family: Arial, sans-serif;
+    }
+    .container {
+      color: #333;
+    }
+    .version {
+      color: #666;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎉 Node.js 自动化部署成功！</h1>
+    <p>该页面由 Jenkins 自动部署</p>
+    <div class="version">部署时间: <span id="deployTime"></span></div>
+  </div>
+  <script>
+    // 显示当前时间（模拟部署版本）
+    document.getElementById('deployTime').textContent = new Date().toLocaleString();
+  </script>
+</body>
+</html>

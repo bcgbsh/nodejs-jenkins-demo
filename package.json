@@ -1,0 +1,17 @@
+{
+  "name": "nodejs-jenkins-demo",
+  "version": "1.0.0",
+  "description": "Node.js + Jenkins 自动化部署示例",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "nodemon app.js",
+    "stop": "pkill -f node app.js || echo '服务未运行'"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
