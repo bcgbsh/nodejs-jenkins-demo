@@ -7,7 +7,7 @@ pipeline {
     // 项目部署目录（根据服务器实际路径修改）
     DEPLOY_DIR = '/u01/nodejs-jenkins-demo'
     // Node.js 环境名称（Jenkins 全局工具配置中设置的名称）
-    NODEJS_NAME = 'Node.js 16.x'
+    NODEJS_NAME = 'node'
     // 服务端口
     PORT = 3300
   }
