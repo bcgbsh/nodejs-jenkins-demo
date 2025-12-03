@@ -61,7 +61,7 @@ pipeline {
         nodejs(nodeJSInstallationName: env.NODEJS_NAME) {
           sh """
             cd ${DEPLOY_DIR}
-            nohup npm start > app.log 2>&1 &
+            nohup npm run start > app.log 2>&1 &
           """
         }
       }
