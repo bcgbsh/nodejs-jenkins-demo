@@ -50,6 +50,7 @@ pipeline {
         sh """
           mkdir -p ${DEPLOY_DIR}
           cp -r ./* ${DEPLOY_DIR}/
+          chown -R jenkins:jenkins ${DEPLOY_DIR}
         """
       }
     }
@@ -58,15 +59,22 @@ pipeline {
     stage('启动新服务') {
       steps {
         echo '🔄 启动新的 Node.js 服务...'
-        nodejs(nodeJSInstallationName: env.NODEJS_NAME) {
-          sh """
-            cd ${DEPLOY_DIR}
-            nohup npm run start > app.log 2>&1 & disown
-          """
-        }
+        def nodejsPath = tool name: env.NODEJS_NAME, type: 'jenkins.plugins.nodejs.tools.NodeJSInstallation'
+        sh """
+          cd ${DEPLOY_DIR}
+          nohup ${nodejsPath}/bin/npm run start > app.log 2>&1 & disown
+          # 等待3秒，检查进程是否存在
+          sleep 3
+          if ps -ef | grep -v grep | grep "node.*${DEPLOY_DIR}"; then
+            echo "✅ 服务进程已启动"
+          else
+            echo "❌ 服务进程未启动，日志内容："
+            cat ${DEPLOY_DIR}/app.log
+            exit 1 
+          fi
+        """
       }
     }
-  }
 
   // 后置操作（无论成功/失败）
   post {
