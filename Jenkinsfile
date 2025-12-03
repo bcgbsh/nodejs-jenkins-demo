@@ -47,10 +47,9 @@ pipeline {
     stage('启动新服务') {
       steps {
         echo '🔄 启动新的 Node.js 服务...'
-        def nodejsPath = tool name: env.NODEJS_NAME, type: 'jenkins.plugins.nodejs.tools.NodeJSInstallation'
         sh """
           cd ${DEPLOY_DIR}
-          nohup ${nodejsPath}/bin/npm run start > app.log 2>&1 & disown
+          nohup npm run start > app.log 2>&1 & disown
           sleep 3
           if ps -ef | grep -v grep | grep "node.*${DEPLOY_DIR}"; then
             echo "✅ 服务进程已启动"
