@@ -76,6 +76,13 @@ pipeline {
         echo '🔄 启动新的 Node.js 服务...'
         nodejs(nodeJSInstallationName: env.NODEJS_NAME) {
           sh """
+            echo "📋 当前执行用户信息："
+            whoami  # 显示当前用户名（如 jenkins、root）
+            echo "当前用户 ID 和所属组："
+            id     # 显示 uid、gid、所属组列表（详细信息）
+            echo "当前工作目录："
+            pwd    # 辅助确认执行路径
+            echo "=============================================="
             cd ${DEPLOY_DIR}
             # 强制杀死残留进程
             pkill -f "node ${APP_ENTRY}" 2>/dev/null || true
