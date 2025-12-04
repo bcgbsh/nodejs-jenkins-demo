@@ -7,6 +7,7 @@ pipeline {
     PORT = 3300
     APP_ENTRY = 'app.js'
     SERVICE_NAME = 'nodejs-jenkins-demo' // 系统服务名
+    TEST_PORT = 3301 // 测试专用端口（避免和生产端口冲突）
   }
 
   stages {
@@ -21,12 +22,45 @@ pipeline {
 
     stage('安装依赖') {
       steps {
-        echo '📦 安装项目依赖...'
+        echo '📦 安装项目依赖（含测试依赖）...'
         nodejs(nodeJSInstallationName: env.NODEJS_NAME) {
-          sh 'npm install --production'
+          // 注意：移除 --production，安装所有依赖（含devDependencies中的Jest）
+          sh 'npm install'
         }
       }
     }
+
+    // ========== 新增：自动化测试阶段 ==========
+    stage('自动化测试') {
+      steps {
+        echo '🧪 执行 Node.js 服务自动化测试...'
+        nodejs(nodeJSInstallationName: env.NODEJS_NAME) {
+          sh '''
+            echo "📌 开始执行 Jest 测试（Node.js 版本：$(node -v)）"
+            echo "📌 测试专用端口：${TEST_PORT}"
+            
+            # 1. 执行 Jest 测试（适配 Node 16，单进程运行）
+            npm test -- --runInBand --no-cache
+            
+            # 2. 测试失败则直接终止部署（Jest 非0退出码会触发Pipeline失败）
+            if [ $? -ne 0 ]; then
+              echo "❌ 自动化测试失败，终止部署流程！"
+              exit 1
+            fi
+            
+            echo "✅ 所有自动化测试用例执行通过！"
+          '''
+        }
+      }
+      // 测试失败时直接终止Pipeline，不进入后续部署阶段
+      post {
+        failure {
+          echo '❌ 自动化测试失败，部署流程终止！'
+          sh 'echo "测试失败时间：$(date)" >> test-fail.log'
+        }
+      }
+    }
+    // ========== 新增结束 ==========
 
     stage('清理旧服务') {
       steps {
