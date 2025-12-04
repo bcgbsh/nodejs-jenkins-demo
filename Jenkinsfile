@@ -1,80 +1,159 @@
 pipeline {
-  // 运行节点（需提前在 Jenkins 配置好 Node.js 环境）
-  agent any
+  agent any  
 
-  // 环境变量配置
   environment {
-    // 项目部署目录（根据服务器实际路径修改）
     DEPLOY_DIR = '/u01/nodejs-jenkins-demo'
-    // Node.js 环境名称（Jenkins 全局工具配置中设置的名称）
-    NODEJS_NAME = 'Node.js 18.x'
-    // 服务端口
+    NODEJS_NAME = 'NodeJs 16.20.2'
     PORT = 3300
+    APP_ENTRY = 'app.js'
+    SERVICE_NAME = 'nodejs-jenkins-demo' // 系统服务名
   }
 
-  // 构建阶段
   stages {
-    // 1. 拉取代码（需配置代码仓库凭证）
     stage('拉取代码') {
-      steps {
+      steps {  
         echo '📥 开始拉取代码...'
-        // 替换为你的代码仓库地址（GitLab/GitHub/Gitee）
         git url: 'https://github.com/bcgbsh/nodejs-jenkins-demo.git',
             branch: 'main',
-            credentialsId: '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' // Jenkins 配置的 Git 凭证 ID
+            credentialsId: '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'
       }
     }
 
-    // 2. 安装依赖
     stage('安装依赖') {
       steps {
         echo '📦 安装项目依赖...'
         nodejs(nodeJSInstallationName: env.NODEJS_NAME) {
-          sh 'npm install --production' // 生产环境跳过 devDependencies
+          sh 'npm install --production'
         }
       }
     }
 
-    // 3. 停止旧服务
-    stage('停止旧服务') {
+    stage('清理旧服务') {
       steps {
-        echo '🛑 停止旧的 Node.js 服务...'
-        sh "cd ${DEPLOY_DIR} && npm run stop || echo '旧服务未运行，无需停止'"
+        echo '🛑 停止旧的 Node.js 服务并释放端口...'
+        sh '''
+          # 1. 停止 systemd 管理的旧服务
+          echo "停止 ${SERVICE_NAME} 系统服务..."
+          systemctl stop ''' + env.SERVICE_NAME + ''' 2>/dev/null || echo "系统服务未运行"
+          
+          # 2. 杀死占用端口的残留进程（兜底）
+          PID=$(lsof -ti:''' + env.PORT + ''' || echo "none")
+          if [ "$PID" != "none" ] && [ -n "$PID" ]; then
+            echo "杀死占用 ''' + env.PORT + ''' 端口的进程：$PID"
+            kill -9 $PID
+            sleep 2
+          else
+            echo "''' + env.PORT + ''' 端口未被占用"
+          fi
+
+          # 3. 杀死旧服务进程（兜底）
+          OLD_PID=$(ps -ef | grep -v grep | grep "node ''' + env.APP_ENTRY + '''" | awk \'{print $2}\' | tr -d \' \' || echo "none")
+          if [ "$OLD_PID" != "none" ] && [ -n "$OLD_PID" ] && [[ "$OLD_PID" =~ ^[0-9]+$ ]]; then
+            echo "杀死旧服务进程：$OLD_PID"
+            kill -9 $OLD_PID
+            sleep 2
+          else
+            echo "无旧的 node ''' + env.APP_ENTRY + ''' 服务进程需要停止"
+          fi
+        '''
       }
     }
 
-    // 4. 部署新代码
     stage('部署代码') {
       steps {
         echo '🚀 部署新代码到服务器...'
-        sh """
-          mkdir -p ${DEPLOY_DIR}
-          cp -r ./* ${DEPLOY_DIR}/
-        """
+        sh '''
+          mkdir -p ''' + env.DEPLOY_DIR + '''
+          # 备份旧日志
+          cp ''' + env.DEPLOY_DIR + '''/app.log ''' + env.DEPLOY_DIR + '''/app.log.bak 2>/dev/null || true
+          # 清空新日志
+          > ''' + env.DEPLOY_DIR + '''/app.log
+          # 复制代码（覆盖原有文件）
+          cp -r ./* ''' + env.DEPLOY_DIR + '''/
+          # 设置权限（适配 systemd 中 root 用户运行）
+          chmod -R 755 ''' + env.DEPLOY_DIR + '''
+          chown -R root:root ''' + env.DEPLOY_DIR + '''
+        '''
       }
     }
 
-    // 5. 启动新服务
     stage('启动新服务') {
-      steps {
-        echo '🔄 启动新的 Node.js 服务...'
+      steps {  
+        echo '🔄 通过 systemctl 启动新的 Node.js 服务...'
         nodejs(nodeJSInstallationName: env.NODEJS_NAME) {
-          sh """
-            cd ${DEPLOY_DIR}
-            nohup npm start > app.log 2>&1 &
-          """
+          sh '''
+            echo "📋 当前执行用户信息："
+            whoami
+            echo "当前用户 ID 和所属组："
+            id
+            echo "当前工作目录："
+            pwd
+            echo "=============================================="
+            
+            # 1. 进入部署目录
+            cd ''' + env.DEPLOY_DIR + '''
+            
+            # 2. 重载 systemd 配置（防止服务文件修改）
+            echo "重载 systemd 配置..."
+            systemctl daemon-reload
+            
+            # 3. 启动系统服务
+            echo "启动 ${SERVICE_NAME} 服务..."
+            systemctl start ''' + env.SERVICE_NAME + '''
+            
+            # 4. 检查服务启动状态
+            if ! systemctl is-active --quiet ''' + env.SERVICE_NAME + '''; then
+              echo "❌ 服务启动失败！查看 systemd 日志："
+              journalctl -u ''' + env.SERVICE_NAME + ''' -n 50
+              exit 1
+            fi
+            echo "✅ 服务启动成功，状态：active(running)"
+            
+            # 5. 检测端口是否监听
+            sleep 3 # 等待服务完全启动
+            PORT_LISTEN=$(ss -tulpn | grep ":''' + env.PORT + '''" | grep "node" || echo "none")
+            if [ "$PORT_LISTEN" = "none" ]; then
+              echo "❌ 服务未监听 ''' + env.PORT + ''' 端口！查看应用日志："
+              cat ''' + env.DEPLOY_DIR + '''/app.log
+              exit 1
+            fi
+            echo "✅ ''' + env.PORT + ''' 端口已被 node 进程监听："
+            ss -tulpn | grep ":''' + env.PORT + '''"
+
+            # 6. 检测服务是否可访问
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:''' + env.PORT + ''')
+            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
+              echo "✅ 服务可正常访问，HTTP 状态码：$HTTP_CODE"
+            else
+              echo "⚠️ 服务进程启动但访问失败，状态码：$HTTP_CODE"
+              echo "应用日志："
+              cat ''' + env.DEPLOY_DIR + '''/app.log
+              # exit 1  // 可选：非关键服务可注释
+            fi
+          '''
         }
       }
     }
   }
 
-  // 后置操作（无论成功/失败）
   post {
     success {
-      echo '✅ 部署成功！访问地址: http://服务器IP:${PORT}'
+      echo "✅ 部署成功！访问地址: http://服务器IP:${env.PORT}"
+      sh '''
+        echo "当前服务状态："
+        systemctl status ''' + env.SERVICE_NAME + ''' --no-pager
+        echo "当前进程列表："
+        ps -ef | grep -v grep | grep "node ''' + env.APP_ENTRY + '''"
+      '''
     }
     failure {
       echo '❌ 部署失败，请检查日志！'
+      sh '''
+        echo "systemd 服务日志："
+        journalctl -u ''' + env.SERVICE_NAME + ''' -n 50 --no-pager
+        echo "应用日志："
+        cat ''' + env.DEPLOY_DIR + '''/app.log || echo "日志文件不存在"
+      '''
     }
   }
 }
